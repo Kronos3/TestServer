@@ -1,7 +1,9 @@
+import contextlib
 from typing import Union
 import socket
 from log import Log
 from sock import SockIO
+import functools
 
 
 class TestServer:
@@ -13,10 +15,48 @@ class TestServer:
 		self.log = Log("server.log", True)
 		self.client = None
 		
-		
-		#addr = socket.getaddrinfo("", port, proto=socket.IPPROTO_TCP)
+		if self.has_dual_stack:
+			self.log.info("IPv6 init")
+			self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM, 0)
+		else:
+			self.log.info("IPv4 init")
+			self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 		
 		self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		
+		try:
+			self.log.info("Binding to port %d" % port)
+			if self.has_dual_stack:
+				self.sock.bind(("", port, 0, 0))
+			else:
+				self.sock.bind(("", port))
+		except IOError as e:
+			self.log.error(str(e))
+			self.exit(98)
+	
+	@property
+	@functools.lru_cache()
+	def has_dual_stack(self, sock=None):
+		"""Return True if kernel allows creating a socket which is able to
+		listen for both IPv4 and IPv6 connections.
+		If *sock* is provided the check is made against it.
+		"""
+		try:
+			socket.AF_INET6
+			socket.IPPROTO_IPV6
+			socket.IPV6_V6ONLY
+		except AttributeError:
+			return False
+		try:
+			if sock is not None:
+				return not sock.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY)
+			else:
+				sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+				with contextlib.closing(sock):
+					sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
+					return True
+		except socket.error:
+			return False
 	
 	def exit(self, code: int):
 		if code != 0:

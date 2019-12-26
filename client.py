@@ -18,6 +18,8 @@ class TestClient:
 		sock = None
 		for address in addr:
 			sock = self.connect(address[0], address[1], address[4])
+			if sock is not None:
+				break
 		
 		if sock is None:
 			self.log.warn("No working connections for %s:%s" % (ip, port))
