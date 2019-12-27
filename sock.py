@@ -13,15 +13,18 @@ class SockIO:
 		self.sock = sock
 		self.log = log
 	
-	def read_int(self):
-		buf = self.sock.recv(4)
-		while len(buf) > 0 and len(buf) != 4:
-			buf += self.sock.recv(4 - len(buf))
+	def read_int(self, length=4):
+		buf = self.sock.recv(length)
+		while len(buf) > 0 and len(buf) != length:
+			buf += self.sock.recv(length - len(buf))
 		
 		if len(buf) == 0:
 			return -1
 		
-		return struct.unpack('i', buf)[0]
+		if length == 4:
+			return struct.unpack('i', buf)[0]
+		else:
+			return struct.unpack('l', buf)[0]
 	
 	def read(self):
 		e_raw = self.read_int()
@@ -32,28 +35,27 @@ class SockIO:
 			self.log.error("Invalid request of type %s" % e_raw)
 			return None
 		
-		length = self.read_int()
+		length = self.read_int(length=8)
 		
 		if e == Protocol.ProtoTypes.ARBITRARY:
 			block = self.sock.recv(Protocol.BLOCK_SIZE)
 			
-			import sys, time
-			
-			width = 40
-			
+			import time
 			start = time.time()
-			s = ""
+			
 			total_read = len(block)
+			mib = 1024 * 1024
+			
 			while total_read < length:
-				percent = total_read / length
-				s = "\r[%s%s] %s miB / %s miB" % ("#" * int(percent * width), " " * int((1 - percent) * width), total_read // (1024 * 1024), length // (1024 * 1024))
-				sys.stdout.write(s)
-				
 				block = self.sock.recv(Protocol.BLOCK_SIZE)
 				total_read += len(block)
-			s = "\r[%s] %s miB / %s miB" % ("#" * width, total_read // (1024 * 1024), length // (1024 * 1024))
 			
-			print("%s\n%.4f miB/sec" % (s, (length // (1024 * 1024)) / (time.time() - start)))
+			end_time = time.time()
+			if end_time != start:
+				print("%.4f miB/sec" % ((length // mib) / (time.time() - start)))
+			else:
+				print("No time drop!!")
+			
 			return Protocol(Protocol.ProtoTypes.ARBITRARY, (length, total_read))
 		
 		raw_request = self.sock.recv(length)
@@ -62,13 +64,11 @@ class SockIO:
 			raw_request += add_on
 		
 		request = Protocol.parse(e, raw_request)
-		self.log.info("Got %s" % repr(request))
 		return request
 
 	def send(self, request: Protocol):
 		for block in request.generate():
 			self.sock.send(block)
-		self.log.info("Sent %s" % repr(request))
 	
 	def validate(self, response: Protocol, expected_type: Protocol.ProtoTypes):
 		if response is None:
@@ -104,7 +104,7 @@ class SockIO:
 		return self.check_valid()
 	
 	def send_arbitrary(self):
-		request = Protocol.generate_arbitrary((1024 * 1024) * 20)
+		request = Protocol.generate_arbitrary((1024 ** 3) * 40)
 		self.send(request)
 		return self.check_valid()
 	

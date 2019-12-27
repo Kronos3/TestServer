@@ -116,11 +116,11 @@ class Protocol:
 		yield self.e.value.to_bytes(4, sys.byteorder)
 		if self.e != Protocol.ProtoTypes.ARBITRARY:
 			data = ",".join(self.args).encode("utf-8")
-			yield len(data).to_bytes(4, sys.byteorder)
+			yield len(data).to_bytes(8, sys.byteorder)
 			yield data
 		else:
 			length = int(self.args[0])
-			yield length.to_bytes(4, sys.byteorder)
+			yield length.to_bytes(8, sys.byteorder)
 			
 			block_n = length // self.BLOCK_SIZE
 			for i in range(block_n):
